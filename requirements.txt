@@ -11,4 +11,3 @@ python-dotenv
 openpyxl
 scikit-learn
 seaborn
-re
