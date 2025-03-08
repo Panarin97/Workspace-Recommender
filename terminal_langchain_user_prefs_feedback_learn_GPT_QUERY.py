@@ -27,9 +27,9 @@ class TerminalRAG:
         self.user_preferences = pd.read_csv("user_preferences.csv")
         self.sensor_data = pd.read_csv("summary_stats.csv")
         self.coord_data = pd.read_excel("Coords.xlsx")
-        self.feedback_tracker = FeedbackTracker()
+        #self.feedback_tracker = FeedbackTracker()
         self.current_room_id = None
-        self.preference_adjuster = PreferenceAdjuster()
+        #self.preference_adjuster = PreferenceAdjuster()
         self.llm = ChatOpenAI(
             model_name="gpt-4",
             temperature=0.7,
