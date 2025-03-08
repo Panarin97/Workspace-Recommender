@@ -219,8 +219,8 @@ def create_plotly_interpolated_maps(
                 x=1
             ),
             margin=dict(l=40, r=40, t=60, b=40),
-            height=1300,
-            width=1000
+            height=975,
+            width=750
         )
         
         figures[param] = fig
