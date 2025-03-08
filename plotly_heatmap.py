@@ -209,7 +209,7 @@ def create_plotly_interpolated_maps(
                 title="Y Coordinate",
                 showgrid=False,
                 scaleanchor="x",  # Make aspect ratio 1:1
-                scaleratio=2
+                scaleratio=0.5
             ),
             legend=dict(
                 orientation="h",
