@@ -131,9 +131,11 @@ def create_plotly_interpolated_maps(
                 labelfont=dict(size=10, color='white')
             ),
             colorbar=dict(
-                title=get_parameter_display_name(param),
-                titleside='right',
-                titlefont=dict(size=14)
+                title=dict(
+                    text=get_parameter_display_name(param),
+                    side='right',  # Move 'right' to be inside the title dict
+                    font=dict(size=14)  # Move font settings inside title dict
+                )
             ),
             hoverinfo='none'
         )
