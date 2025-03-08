@@ -1,0 +1,14 @@
+streamlit
+pandas
+numpy
+matplotlib
+plotly
+scipy
+langchain
+langchain_openai
+openai
+python-dotenv
+openpyxl
+scikit-learn
+seaborn
+re
