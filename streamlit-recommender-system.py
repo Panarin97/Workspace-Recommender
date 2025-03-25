@@ -87,7 +87,11 @@ if 'rag_system' not in st.session_state:
 
 # App header
 st.title("Workspace Recommender")
-st.markdown("Find your ideal workspace based on environmental preferences")
+st.markdown("""
+This application is a recommender system based on the 2019 Oulu TellUs space sensor readings.  
+It uses LLM chains to process user queries, generate database requests, analyze results, and provide relevant responses.  
+The system can also dynamically adjust user preferences based on recent queries. Preferences are reset to default values for each new user.
+""")
 
 # Main layout
 col1, col2 = st.columns([1, 2])
