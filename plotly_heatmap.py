@@ -131,9 +131,11 @@ def create_plotly_interpolated_maps(
                 labelfont=dict(size=10, color='white')
             ),
             colorbar=dict(
-                title=get_parameter_display_name(param),
-                titleside='right',
-                titlefont=dict(size=14)
+                title=dict(
+                    text=get_parameter_display_name(param),
+                    side='right',  # Move 'right' to be inside the title dict
+                    font=dict(size=14)  # Move font settings inside title dict
+                )
             ),
             hoverinfo='none'
         )
@@ -207,7 +209,7 @@ def create_plotly_interpolated_maps(
                 title="Y Coordinate",
                 showgrid=False,
                 scaleanchor="x",  # Make aspect ratio 1:1
-                scaleratio=1
+                scaleratio=0.5
             ),
             legend=dict(
                 orientation="h",
@@ -217,8 +219,8 @@ def create_plotly_interpolated_maps(
                 x=1
             ),
             margin=dict(l=40, r=40, t=60, b=40),
-            height=500,
-            width=650
+            height=975,
+            width=750
         )
         
         figures[param] = fig
