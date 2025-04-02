@@ -210,7 +210,7 @@ class TerminalRAG:
             3. If user specifically asks for multiple locations (like "several" or "top 3"), you can produce as many as the user needs. 
             If the user asks for too many, apologize for the inconvenience and give the maximum number that you have. State that you cannot display this many locations.
 
-            CRITICAL: For ANY location or locations you identify in your answer, you MUST include exactly one line at the end in this format: Selected_rooms: <location1_id>, <location2_id>, <location3_id>
+            CRITICAL: For ANY location or locations you identify in your answer, you MUST include exactly one line at the end in this format: Selected_locations: <location1_id>, <location2_id>, <location3_id>
             in a separate line at the end. 
                 - No periods after location IDs
                 - Separate multiple locations with commas only
@@ -385,7 +385,7 @@ class TerminalRAG:
         Looks for a line in the LLM's final text like 'RECOMMENDED_ROOM: SomeRoomID'.
         Returns the room ID or None if not found.
         """
-        match = re.search(r"Selected_rooms:\s*([^\s]+)", llm_answer)
+        match = re.search(r"Selected_locations:\s*([^\s]+)", llm_answer)
         if match:
             return match.group(1).strip()
         return None

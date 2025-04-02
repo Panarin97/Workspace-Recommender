@@ -174,7 +174,7 @@ with col1:
                 # Try to parse from the answer text directly
                 # Look for the "Selected_rooms:" pattern in the answer
                     import re
-                    match = re.search(r"Selected_rooms:\s*(.*?)$", answer, re.MULTILINE)
+                    match = re.search(r"Selected_locations:\s*(.*?)$", answer, re.MULTILINE)
                     if match:
                         # Split by commas and clean up
                         room_list = match.group(1).strip()
