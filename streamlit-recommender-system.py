@@ -88,7 +88,8 @@ if 'rag_system' not in st.session_state:
 # App header
 st.title("Workspace Recommender")
 st.markdown("""
-This application is a recommender system based on the 2019 Oulu TellUs space sensor readings.  
+This application is a recommender system based on the Oulu TellUs space sensor readings. 
+The current version is using a snapshot of readings taken in 2019. For tesing purposes, you can assume that this is the current reading of the area. 
 It uses LLM chains to process user queries, generate database requests, analyze results, and provide relevant responses.  
 The system can also dynamically adjust user preferences based on recent queries. Preferences are reset to default values for each new user.
 """)
@@ -110,12 +111,12 @@ with col1:
     # )
     
     example_queries = [
-        "Find me a room with low CO2 levels",
-        "I need a warm room with good lighting",
-        "What's the quietest room available?",
+        "Find me a location with low CO2 levels",
+        "I need a warm location with good lighting",
+        "What's the quietest location available?",
         "I prefer a cooler environment with moderate humidity",
-        "Show me the average temperature across all rooms",
-        "I'd like a room that's slightly warmer than average"
+        "Show me the average temperature across all locations",
+        "I'd like a location that's slightly warmer than average"
     ]
 
     # When an example is selected, update the text input
@@ -137,7 +138,7 @@ with col1:
         value=st.session_state.query_text,
         height=100,  # Make it taller
         key="current_query",  # This connects it to session_state.query_text
-        placeholder="e.g., a quiet room with good lighting"
+        placeholder="e.g., Find me a location with low CO2 levels"
     )
     
     
@@ -240,7 +241,7 @@ with col1:
         st.markdown("""
         You can adjust your preferences using natural language commands like:
         
-        - "I prefer cooler rooms" or "Make it slightly warmer"
+        - "I prefer cooler locations" or "Make it slightly warmer"
         - "I'm very sensitive to CO2" or "I don't mind humidity"
         - "Show me my current preferences"
         
@@ -308,8 +309,8 @@ with col2:
         ### Welcome to Workspace Recommender!
         
         Use the form on the left to describe your ideal workspace. You can:
-        
-        - Ask for rooms with specific environmental conditions
+
+        - Ask for locations with specific environmental conditions
         - Request information about available spaces
         - Adjust your preferences using natural language
         - View visual representations of the recommended spaces

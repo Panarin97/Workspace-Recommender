@@ -155,7 +155,7 @@ def create_plotly_interpolated_maps(
             ),
             name='Sensor Locations',
             hovertemplate='<b>%{text}</b><br>Value: %{customdata:.2f}<extra></extra>',
-            text=[f"Room: {sensor_df.loc[sensor_df['Location'] == loc, 'Location'].values[0]}" 
+            text=[f"Location: {sensor_df.loc[sensor_df['Location'] == loc, 'Location'].values[0]}" 
                   for loc in [loc for i, loc in enumerate(sensor_df['Location']) if loc in coord_df['Location'].values]],
             customdata=z
         ))

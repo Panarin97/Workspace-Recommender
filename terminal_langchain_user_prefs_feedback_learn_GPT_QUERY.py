@@ -134,7 +134,7 @@ class TerminalRAG:
         # Chain for generating pandas queries
         query_generation_prompt = PromptTemplate(
             template = """
-            You are a data query assistant that converts natural language questions about room sensor data 
+            You are a data query assistant that converts natural language questions about location sensor data 
             into a single-line Pandas DataFrame operation on 'df'. 
 
             - The DataFrame 'df' has columns:
@@ -156,26 +156,26 @@ class TerminalRAG:
             - "quiet" => near the lower end of pir_mean (occupancy)
             - "crowded" => near the higher end of pir_mean
             - "good" or "bad" => interpret in context of param_stats if user specifically refers to "good temperature" => near comfortable mid range, "bad humidity" => near extremes, etc.
-            These are just examples, apply this logic to all words users might describe when talking about room parameters. 
+            These are just examples, apply this logic to all words users might describe when talking about location parameters. 
 
             **Always respect the min and max from param_stats_json**. 
-            Example: If user says "hotter than 30" but max is 25.2, fallback to 25.2 and notify user that their request cannpt be fullfilled but say that this is the closest match available. 
+            Example: If user says "hotter than 30" but max is 25.2, fallback to 25.2 and notify user that their request cannot be fulfilled but say that this is the closest match available. 
 
 
             ALSO: If the user wants a general statistic such as average or count - e.g. 
-            "What is the average temperature across all rooms?" - produce an 
+            "What is the average temperature across all locations?" - produce an 
             aggregation snippet (like df["temperature_mean"].mean() or df.shape[0], etc.)
 
             - The user has existing preferences: {user_preferences}
-            - Last recommended room (or no room): {last_recommendation_context}
+            - Last recommended location (or no location): {last_recommendation_context}
 
-            - The user's question might ask for "colder room", "lowest CO2", or 
-            "average temperature," or "how many rooms have humidity>60," etc.
+            - The user's question might ask for "colder location", "lowest CO2", or 
+            "average temperature," or "how many locations have humidity>60," etc.
 
             - Return ONLY a single-line Pandas code snippet that, when evaluated, 
             produces the correct result. No text or explanation, just code.
 
-            - If there is a last recommended room, you must use that room's metrics as 
+            - If there is a last recommended location, you must use that location's metrics as 
             the primary reference instead of the user preferences, if the user specifically 
             references "colder/warmer than last recommended," etc.
 
@@ -195,33 +195,33 @@ class TerminalRAG:
         # Chain for analyzing results
         analysis_prompt = PromptTemplate(
             template="""
-            You are an AI assistant specialized in analyzing sensor data for rooms and providing personalized recommendations.
+            You are an AI assistant specialized in analyzing sensor data for locations and providing personalized recommendations.
             Provide answers in a single concise sentence whenever possible.
 
             SYSTEM CONTEXT:
-            - We have top_rooms_json: {top_rooms_json}
+            - We have top_locations_json: {top_rooms_json}
             - The user's preference info is: {context}
             - The user's question is: {question}
             - Current user ID: {current_user}
 
             Instructions:
-            1. If top_rooms_json only has aggregator data and top_rooms_json is an array with a single dictionary that has a "Value" key, response should include <that numeric> as it is likely the answer. 
-            2. If it shows multiple rooms but user only asked for one room, pick exactly one as recommended (or none if no suitable).
-            3. If user specifically asks for multiple rooms (like "several" or "top 3"), you can produce as many as the user needs. 
-               If the user asks for too many, apologize for the inconvenice and give the maximum number that you have. State that you cannot display this many rooms.
+            1. If top_locations_json only has aggregator data and top_locations_json is an array with a single dictionary that has a "Value" key, response should include <that numeric> as it is likely the answer. 
+            2. If it shows multiple locations but user only asked for one location, pick exactly one as recommended (or none if no suitable).
+            3. If user specifically asks for multiple locations (like "several" or "top 3"), you can produce as many as the user needs. 
+            If the user asks for too many, apologize for the inconvenience and give the maximum number that you have. State that you cannot display this many locations.
 
-            CRITICAL: For ANY room or rooms you identify in your answer, you MUST include exactly one line at the end in this format: Selected_rooms: <room1_id>, <room2_id>, <room3_id>
+            CRITICAL: For ANY location or locations you identify in your answer, you MUST include exactly one line at the end in this format: Selected_rooms: <location1_id>, <location2_id>, <location3_id>
             in a separate line at the end. 
-                - No periods after room IDs
-                - Separate multiple rooms with commas only
-                - List at most 5 specific rooms, even if more are found
-                - If more than 5 rooms match, mention something like this in your response: "Showing 5 out of X matching rooms"
+                - No periods after location IDs
+                - Separate multiple locations with commas only
+                - List at most 5 specific locations, even if more are found
+                - If more than 5 locations match, mention something like this in your response: "Showing 5 out of X matching locations"
             
-            4. If no rooms are returned, handle gracefully.
+            4. If no locations are returned, handle gracefully.
 
             Don't disclaim you lack user preference data — you have it in {context}.
             """,
-                input_variables=["context", "question", "current_user", "top_rooms_json"]
+            input_variables=["context", "question", "current_user", "top_rooms_json"]
         )
         self.analysis_chain = LLMChain(llm=self.llm, prompt=analysis_prompt)
 
