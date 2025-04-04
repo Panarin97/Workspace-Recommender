@@ -227,11 +227,11 @@ def create_plotly_interpolated_maps(
         # Improve layout
         fig.update_layout(
             title=dict(
-                text=f"{get_parameter_display_name(param)} Distribution (Mirrored)",
+                text=f"{get_parameter_display_name(param)} Distribution",
                 font=dict(size=16)
             ),
             xaxis=dict(
-                title="X Coordinate (Mirrored)",
+                title="X Coordinate",
                 showgrid=False
             ),
             yaxis=dict(
@@ -432,11 +432,11 @@ def create_floor_plan_with_sensors(
     # Improve layout - EXACTLY match heatmap layout
     fig.update_layout(
         title=dict(
-            text="Floor Plan (Mirrored)",  # Title matching heatmap style
+            text="Floor Plan",  # Title matching heatmap style
             font=dict(size=16)
         ),
         xaxis=dict(
-            title="X Coordinate (Mirrored)",  # Label matching heatmap
+            title="X Coordinate",  # Label matching heatmap
             showgrid=False
         ),
         yaxis=dict(
