@@ -130,6 +130,46 @@ class TerminalRAG:
 
     def initialize_chain(self):
         print("Creating LLM chains...")
+
+            # Area definitions for sensor locations - used in prompts
+        area_definitions = """
+        # Workspace Areas and their Sensor IDs:
+        
+        1. SM: Staff Meeting room
+        - Sensors: SM-1401, SM-1402, SM-1501, SM-1502, SM-1601, SM-1602
+        
+        2. BK: Business Kitchen
+        - Sensors: BK-2001 through BK-2913 (e.g., BK-2101, BK-2201, etc.)
+        
+        3. CM: Chill Meeting room
+        - Sensors: CM03-1001, CM03-1002, CM03-1101, CM03-1102, CM03-1103
+        
+        4. BM: Brisk Meeting room
+        - Sensors: BM02-0701, BM02-0801, BM02-0802, BM02-0803, BM02-0901, BM02-0902
+        
+        5. AM: Aspire Meeting room
+        - Sensors: AM01-0101 through AM01-0601 (e.g., AM01-0201, AM01-0301, etc.)
+        
+        6. TY: Tellus public area
+        - Sensors: All sensors with prefix TY- (e.g., TY-0101, TY-0201, etc.)
+        
+        7. SR: Staff Room
+        - Sensors: SR-1411
+        
+        # Specific Areas within Tellus (TY) public space:
+        
+        8. Stage Area
+        - Sensors: TY-0101 to TY-0108, TY-0201 to TY-0208, TY-0301 to TY-0308, TY-0401 to TY-0408
+        
+        9. Nest Area
+        - Sensors: TY-1503 to TY-1507, TY-1603 to TY-1607, TY-1703 to TY-1707
+        
+        10. Park Area
+        - Sensors: TY-2510 to TY-2513, TY-2610 to TY-2613, TY-2710 to TY-2713, TY-2810 to TY-2813, TY-2910 to TY-2913
+        
+        11. Cafe Area
+        - Sensors: TY-0801 to TY-0803, TY-0902 to TY-0903, TY-1002 to TY-1003, TY-1101 to TY-1103, TY-1201 to TY-1203
+        """
         
         # Chain for generating pandas queries
         query_generation_prompt = PromptTemplate(
@@ -146,7 +186,25 @@ class TerminalRAG:
             pir_mean (float),
             description (str)
 
+            # Metrics Explanation:
+            - Temperature (°C): Room temperature in degrees Celsius, affecting thermal comfort.
+            - Humidity (%): Percentage of moisture in the air, with 30-60% typically being comfortable.
+            - CO₂ (ppm): Carbon dioxide concentration in parts per million. Lower values (<800 ppm) indicate better air quality/ventilation.
+            - Light (lux): Light intensity measured in lux. Higher values indicate brighter spaces.
+            - Occupancy: Based on passive infrared (PIR) motion sensors that detect movement and human presence. Higher values indicate more crowded/active areas.
+
             We have these dataset stats (min, max, std) in JSON: {param_stats_json}
+
+            We have the following area definitions for sensor locations: {area_definitions}
+
+            When users ask about or reference appropriately specific areas by name (like "Business Kitchen", "Tellus public area", 
+            "Stage", "Nest", "Park", "Cafe", etc.), you should filter the dataframe to include only 
+            sensors in that area. Use string matching with the sensor ID prefixes listed above.
+
+             For example:
+            - If user asks about "Business Kitchen", filter for locations starting with "BK-"
+            - If user asks about "Stage area", filter for the specific TY- sensors in that area
+            - If user asks about "Chill Meeting room", filter for locations starting with "CM"
 
             When users mention words like:
             - "colder" or "cooler" => interpret as near the lower end (above min but below midpoint or stdev) of the temperature range
@@ -188,7 +246,7 @@ class TerminalRAG:
 
             User's question: "{question}"
             """,
-            input_variables=["question", "user_preferences", "last_recommendation_context", "param_stats_json"]
+            input_variables=["question", "user_preferences", "last_recommendation_context", "param_stats_json", "area_definitions"]
         )
         self.query_chain = LLMChain(llm=self.llm, prompt=query_generation_prompt)
         
@@ -198,17 +256,27 @@ class TerminalRAG:
             You are an AI assistant specialized in analyzing sensor data for locations and providing personalized recommendations.
             Provide answers in a single concise sentence whenever possible.
 
+            # Metrics Explanation:
+            - Temperature (°C): Room temperature in degrees Celsius, affecting thermal comfort.
+            - Humidity (%): Percentage of moisture in the air, with 30-60% typically being comfortable.
+            - CO₂ (ppm): Carbon dioxide concentration in parts per million. Lower values (<800 ppm) indicate better air quality/ventilation.
+            - Light (lux): Light intensity measured in lux. Higher values indicate brighter spaces.
+            - Occupancy: Based on passive infrared (PIR) motion sensors that detect movement and human presence. Higher values indicate more crowded/active areas.
+
             SYSTEM CONTEXT:
             - We have top_locations_json: {top_rooms_json}
             - The user's preference info is: {context}
             - The user's question is: {question}
             - Current user ID: {current_user}
+            - area_definitions: {area_definitions}
 
             Instructions:
             1. If top_locations_json only has aggregator data and top_locations_json is an array with a single dictionary that has a "Value" key, response should include <that numeric> as it is likely the answer. 
             2. If it shows multiple locations but user only asked for one location, pick exactly one as recommended (or none if no suitable).
             3. If user specifically asks for multiple locations (like "several" or "top 3"), you can produce as many as the user needs. 
             If the user asks for too many, apologize for the inconvenience and give the maximum number that you have. State that you cannot display this many locations.
+            4. When mentioning locations in your answer, include the area they're located in. For example, instead of just "Location TY-1201", say "Location TY-1201 in the Cafe area" or "BK-2101 in the Business Kitchen area", if appropriate.
+            5. If the user asks about a specific area by name (like "Business Kitchen" or "Stage area"), make sure to acknowledge this in your response and ensure the locations mentioned are from that area.
 
             CRITICAL: For ANY location or locations you identify in your answer, you MUST include exactly one line at the end in this format: Selected_locations: <location1_id>, <location2_id>, <location3_id>
             in a separate line at the end. 
@@ -221,7 +289,7 @@ class TerminalRAG:
 
             Don't disclaim you lack user preference data — you have it in {context}.
             """,
-            input_variables=["context", "question", "current_user", "top_rooms_json"]
+            input_variables=["context", "question", "current_user", "top_rooms_json", "area_definitions"]
         )
         self.analysis_chain = LLMChain(llm=self.llm, prompt=analysis_prompt)
 
@@ -465,6 +533,45 @@ class TerminalRAG:
             print("\nDebug: Starting ask_question")
             print(f"Debug: Question received: {question}")
 
+            area_definitions = """
+            # Workspace Areas and their Sensor IDs:
+            
+            1. SM: Staff Meeting room
+            - Sensors: SM-1401, SM-1402, SM-1501, SM-1502, SM-1601, SM-1602
+            
+            2. BK: Business Kitchen
+            - Sensors: BK-2001 through BK-2913 (e.g., BK-2101, BK-2201, etc.)
+            
+            3. CM: Chill Meeting room
+            - Sensors: CM03-1001, CM03-1002, CM03-1101, CM03-1102, CM03-1103
+            
+            4. BM: Brisk Meeting room
+            - Sensors: BM02-0701, BM02-0801, BM02-0802, BM02-0803, BM02-0901, BM02-0902
+            
+            5. AM: Aspire Meeting room
+            - Sensors: AM01-0101 through AM01-0601 (e.g., AM01-0201, AM01-0301, etc.)
+            
+            6. TY: Tellus public area
+            - Sensors: All sensors with prefix TY- (e.g., TY-0101, TY-0201, etc.)
+            
+            7. SR: Staff Room
+            - Sensors: SR-1411
+            
+            # Specific Areas within Tellus (TY) public space:
+            
+            8. Stage Area
+            - Sensors: TY-0101 to TY-0108, TY-0201 to TY-0208, TY-0301 to TY-0308, TY-0401 to TY-0408
+            
+            9. Nest Area
+            - Sensors: TY-1503 to TY-1507, TY-1603 to TY-1607, TY-1703 to TY-1707
+            
+            10. Park Area
+            - Sensors: TY-2510 to TY-2513, TY-2610 to TY-2613, TY-2710 to TY-2713, TY-2810 to TY-2813, TY-2910 to TY-2913
+            
+            11. Cafe Area
+            - Sensors: TY-0801 to TY-0803, TY-0902 to TY-0903, TY-1002 to TY-1003, TY-1101 to TY-1103, TY-1201 to TY-1203
+            """
+
             # 1) interpret preference changes
             action, changes = self.parse_preferences_intent_and_changes(question)
             if action=="show":
@@ -501,12 +608,14 @@ class TerminalRAG:
             # for passing dataset stats into the query chain
             stats_str = json.dumps(self.param_stats, default=str)
 
+
             if need_data and user_data is not None:
                 query_result = self.query_chain.invoke({
                     "question": question,
                     "user_preferences": user_data.to_dict(),
                     "last_recommendation_context": context_string,
-                    "param_stats_json": stats_str
+                    "param_stats_json": stats_str,
+                    "area_definitions": area_definitions
                 })
                 raw_code = query_result["text"].strip()
                 print("Debug: LLM raw code:", raw_code)
@@ -552,9 +661,10 @@ class TerminalRAG:
                 "question": question,
                 "context": context_for_analysis,
                 "current_user": self.user_id,
-                "top_rooms_json": top_rooms_json
+                "top_rooms_json": top_rooms_json,
+                "area_definitions": area_definitions
             })
-            final_answer = analysis_result["text"]
+            final_answer = analysis_result["text"] if analysis_result else "I couldn't find a suitable recommendation."
             print("Debug: analysis chain output =>", final_answer)
 
             recommended_id = self.parse_recommended_room(final_answer)
@@ -577,7 +687,7 @@ class TerminalRAG:
         except Exception as e:
             print(f"Debug: Full error => {str(e)}")
             print(f"Traceback =>\n{traceback.format_exc()}")
-            return None
+            return "I apologize, but I encountered an error while processing your request."
 
 
     def process_feedback(self, feedback_text, room_conditions):

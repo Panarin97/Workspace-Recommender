@@ -6,6 +6,16 @@ import os
 from terminal_langchain_user_prefs_feedback_learn_GPT_QUERY import TerminalRAG
 from plotly_heatmap import create_plotly_interpolated_maps
 import logging
+from PIL import Image
+import base64
+import io
+import plotly.graph_objects as go
+from plotly_heatmap import create_floor_plan_with_sensors
+
+
+# Global visualization dimensions
+VISUALIZATION_WIDTH = 650  # Reduced from 750
+VISUALIZATION_HEIGHT = 800  # Fixed height for all visualizations
 
 
 logging.basicConfig(level=logging.INFO)
@@ -30,11 +40,192 @@ st.set_page_config(
     layout="wide"
 )
 
+def get_floor_plan_image(file_path="./assets/floor_plan.png"):
+    """Load floor plan image and convert it to base64 for display"""
+    try:
+        with open(file_path, "rb") as img_file:
+            img_bytes = img_file.read()
+            return img_bytes
+    except Exception as e:
+        print(f"Error loading floor plan: {e}")
+        return None
+    
+def get_floor_plan_dimensions(file_path="./assets/floor_plan.png"):
+    """Get the dimensions of the floor plan image"""
+    try:
+        with Image.open(file_path) as img:
+            return img.size
+    except Exception as e:
+        print(f"Error getting floor plan dimensions: {e}")
+        return (750, 975)
+    
+
+def create_floor_plan_figure(file_path="./assets/floor_plan.png"):
+    """Create a Plotly figure with the floor plan image that matches heatmap dimensions"""
+    import os
+    import base64
+    try:
+        # Get image dimensions
+        with Image.open(file_path) as img:
+            width, height = img.size
+            print(f"Floor plan dimensions: {width}x{height}")
+            
+            # In Plotly, the actual plot area typically takes up about 90% of the width
+            # and 75-80% of the height (accounting for title, margins, colorbar, etc.)
+            # These values are approximations based on default Plotly layouts
+            
+            # Calculate dimensions that will make the floor plan match the heatmap plot area
+            plot_area_width_ratio = 0.5  # 90% of the width is the actual plot area
+            plot_area_height_ratio = 1  # 75% of the height is the actual plot area
+            
+            # Position the image to match the plotting area of other graphs
+            x_start = (1 - plot_area_width_ratio) / 2  # Center horizontally
+            y_start = 1 - (1 - plot_area_height_ratio) / 2  # Align with top, leaving space for title
+            
+        # Convert image to base64
+        with open(file_path, "rb") as img_file:
+            img_bytes = img_file.read()
+            encoded = base64.b64encode(img_bytes).decode('ascii')
+        
+        # Create a blank figure
+        fig = go.Figure()
+        
+        # Add image using layout.images
+        fig.update_layout(
+            images=[dict(
+                source=f'data:image/png;base64,{encoded}',
+                xref="paper", yref="paper",
+                x=x_start,  # Start position X
+                y=y_start,  # Start position Y
+                sizex=plot_area_width_ratio,  # Width ratio
+                sizey=plot_area_height_ratio,  # Height ratio
+                sizing="contain",  # Maintain aspect ratio
+                layer="below"
+            )],
+            # Set standard dimensions
+            width=VISUALIZATION_WIDTH,
+            height=VISUALIZATION_HEIGHT,
+            margin=dict(l=40, r=40, t=60, b=40),
+        )
+        
+        # Add a dummy trace to make the legend work
+        fig.add_trace(go.Scatter(
+            x=[0], y=[0],
+            mode='markers',
+            marker=dict(opacity=0),
+            showlegend=False,
+            hoverinfo='none'
+        ))
+        
+        # Update axes to match other plots appearance
+        fig.update_xaxes(
+            visible=False
+        )
+        
+        fig.update_yaxes(
+            visible=False
+        )
+        
+        # Update title
+        fig.update_layout(
+            title=dict(
+                text="Floor Plan",
+                font=dict(size=16)
+            ),
+        )
+        
+        return fig
+        
+    except Exception as e:
+        print(f"Error creating floor plan figure: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return None
+
+def display_floor_plan_with_sliders():
+    """Display floor plan with interactive sliders for size and position adjustment"""
+    
+    # Check if adjustment settings exist in session state
+    if 'floor_plan_width' not in st.session_state:
+        st.session_state.floor_plan_width = 0.9
+    if 'floor_plan_height' not in st.session_state:
+        st.session_state.floor_plan_height = 0.75
+    
+    # Create sliders for adjusting size
+    col1, col2 = st.columns(2)
+    with col1:
+        width_ratio = st.slider("Width", 0.5, 1.0, st.session_state.floor_plan_width, 0.01, 
+                              key="width_slider", help="Adjust the width of the floor plan")
+    with col2:
+        height_ratio = st.slider("Height", 0.5, 1.0, st.session_state.floor_plan_height, 0.01,
+                               key="height_slider", help="Adjust the height of the floor plan")
+    
+    # Update session state when sliders change
+    st.session_state.floor_plan_width = width_ratio
+    st.session_state.floor_plan_height = height_ratio
+    
+    # Generate floor plan with current settings
+    try:
+        file_path = "./assets/floor_plan.png"
+        
+        # Get image data
+        with open(file_path, "rb") as img_file:
+            img_bytes = img_file.read()
+            encoded = base64.b64encode(img_bytes).decode('ascii')
+        
+        # Create figure with adjusted size
+        fig = go.Figure()
+        
+        # Position the image
+        x_start = (1 - width_ratio) / 2  # Center horizontally
+        y_start = 1 - (1 - height_ratio) / 2  # Align with top, leaving space for title
+        
+        fig.update_layout(
+            images=[dict(
+                source=f'data:image/png;base64,{encoded}',
+                xref="paper", yref="paper",
+                x=x_start,
+                y=y_start,
+                sizex=width_ratio,
+                sizey=height_ratio,
+                sizing="contain",
+                layer="below"
+            )],
+            width=VISUALIZATION_WIDTH,
+            height=VISUALIZATION_HEIGHT,
+            margin=dict(l=40, r=40, t=60, b=40),
+            title="Floor Plan (Adjustable)"
+        )
+        
+        # Add dummy trace
+        fig.add_trace(go.Scatter(
+            x=[0], y=[0],
+            mode='markers',
+            marker=dict(opacity=0),
+            showlegend=False,
+            hoverinfo='none'
+        ))
+        
+        fig.update_xaxes(visible=False)
+        fig.update_yaxes(visible=False)
+        
+        # Display the figure
+        st.plotly_chart(fig, use_container_width=True)
+        
+        # Display current settings for reference
+        st.text(f"Current settings: width_ratio={width_ratio:.2f}, height_ratio={height_ratio:.2f}")
+        
+        # Update the floor plan in session state for other tabs
+        st.session_state.floor_plan_fig = fig
+    
+    except Exception as e:
+        st.error(f"Error displaying floor plan: {str(e)}")
+        
+
 def generate_visualizations(recommended_room=None):
     try:
         logger.info(f"Generating visualizations with recommended_room: {recommended_room}")
         if recommended_room:
-
             # Log room existence check
             if isinstance(recommended_room, list):
                 for room in recommended_room:
@@ -48,6 +239,7 @@ def generate_visualizations(recommended_room=None):
                 else:
                     logger.warning(f"Room {recommended_room} NOT FOUND in sensor data")
         
+        # Generate regular heatmaps
         maps = create_plotly_interpolated_maps(
             sensor_df=st.session_state.rag_system.sensor_data,
             coord_df=st.session_state.rag_system.coord_data,
@@ -55,12 +247,25 @@ def generate_visualizations(recommended_room=None):
             recommended_room=recommended_room,
             padding_percent=0.05
         )
+        
+        # Generate a single floor plan with sensors using temperature data
+        # You can change the parameter to any of the other options if preferred
+        floor_map = create_floor_plan_with_sensors(
+            sensor_df=st.session_state.rag_system.sensor_data,
+            coord_df=st.session_state.rag_system.coord_data,
+            recommended_room=recommended_room,
+            parameter="temperature_mean"  # Using temperature for coloring
+        )
+        if floor_map:
+            maps["floor_map"] = floor_map
+        
         logger.info(f"Successfully generated {len(maps)} maps")
         return maps
     except Exception as e:
         logger.error(f"Error generating visualizations: {str(e)}", exc_info=True)
         st.error(f"Error generating visualizations: {str(e)}")
         return {}
+
 
 # initialize session state for persistence
 if 'rag_system' not in st.session_state:
@@ -84,6 +289,8 @@ if 'rag_system' not in st.session_state:
     
     # Generate initial maps
     st.session_state.maps = generate_visualizations()
+
+    st.session_state.floor_plan_fig = create_floor_plan_figure()
 
 # App header
 st.title("Workspace Recommender")
@@ -159,6 +366,10 @@ with col1:
             with st.spinner("Analyzing your request..."):
                 # Process the query
                 answer = st.session_state.rag_system.ask_question(query)
+
+                if answer is None:
+                    answer = "I apologize, but I couldn't process your request. Please try again."
+
                 st.session_state.history.append({"query": query, "answer": answer})
                 
                 # Update maps based on recommendation
@@ -272,20 +483,25 @@ with col2:
         st.markdown("### Environment Visualization")
         
         # Display tabs with current visualizations
-        tab_names = ["Temperature", "Humidity", "CO2", "Light", "Occupancy"]
-        param_keys = ["temperature_mean", "humidity_mean", "co2_mean", "light_mean", "pir_mean"]
-        
+        tab_names = ["Floor Map", "Temperature", "Humidity", "CO2", "Light", "Occupancy"]
+        param_keys = ["floor_map", "temperature_mean", "humidity_mean", "co2_mean", "light_mean", "pir_mean"]
+
         tabs = st.tabs(tab_names)
-        
+
         # Use the visualizations in each tab
         for i, tab in enumerate(tabs):
             with tab:
                 param = param_keys[i]
-                if param in st.session_state.maps:
+                if param == "floor_map":
+                    if 'maps' in st.session_state and param in st.session_state.maps:
+                        st.plotly_chart(st.session_state.maps[param], use_container_width=True)
+                    else:
+                        st.info("Floor map visualization not available.")
+                elif param in st.session_state.maps:
                     st.plotly_chart(st.session_state.maps[param], use_container_width=True)
                 else:
                     st.info(f"No visualization available for {tab_names[i]}")
-        
+                
         # Show room details if there's a recommendation
         if st.session_state.has_recommendation and st.session_state.rag_system.last_recommended:
             st.markdown("### Room Details")
@@ -320,8 +536,8 @@ with col2:
         st.markdown("### Current Environment Conditions")
         
         # Display tabs with initial visualizations
-        tab_names = ["Temperature", "Humidity", "CO2", "Light", "Occupancy"]
-        param_keys = ["temperature_mean", "humidity_mean", "co2_mean", "light_mean", "pir_mean"]
+        tab_names = ["Floor Map", "Temperature", "Humidity", "CO2", "Light", "Occupancy"]
+        param_keys = ["floor_map", "temperature_mean", "humidity_mean", "co2_mean", "light_mean", "pir_mean"]
         
         tabs = st.tabs(tab_names)
         
@@ -329,11 +545,14 @@ with col2:
         for i, tab in enumerate(tabs):
             with tab:
                 param = param_keys[i]
-                if 'maps' in st.session_state and param in st.session_state.maps:
+                if param == "floor_map":
+                    if 'maps' in st.session_state and param in st.session_state.maps:
+                        st.plotly_chart(st.session_state.maps[param], use_container_width=True)
+                    else:
+                        st.info("Floor map visualization not available.")
+                elif param in st.session_state.maps:
                     st.plotly_chart(st.session_state.maps[param], use_container_width=True)
                 else:
-                    st.info(f"Initial visualization not available for {tab_names[i]}")
-
-# Footer
+                    st.info(f"No visualization available for {tab_names[i]}")
 st.markdown("---")
 st.markdown("Workspace Recommender | Powered by AI")

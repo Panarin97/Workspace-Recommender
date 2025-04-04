@@ -4,6 +4,13 @@ import numpy as np
 import plotly.graph_objects as go
 from scipy.interpolate import Rbf
 import plotly.io as pio
+from PIL import Image
+import base64
+import io
+
+# Global visualization dimensions
+VISUALIZATION_WIDTH = 650  # Reduced from 750
+VISUALIZATION_HEIGHT = 800  # Fixed height for all visualizations
 
 # Set default template for Plotly
 pio.templates.default = "plotly_white"
@@ -29,6 +36,17 @@ def create_plotly_interpolated_maps(
     Returns:
         Dictionary of Plotly figures for each parameter
     """
+    try:
+        with Image.open("./assets/floor_plan.png") as img:
+            floor_plan_width, floor_plan_height = img.size
+            # Calculate aspect ratio
+            aspect_ratio = floor_plan_height / floor_plan_width
+    except Exception as e:
+        print(f"Warning: Couldn't load floor plan for dimensions: {e}")
+        # Default to your existing dimensions
+        floor_plan_width, floor_plan_height = 750, 975
+        aspect_ratio = 975 / 750
+
     # Create a copy of coord_df to avoid modifying the original
     mirrored_coord_df = coord_df.copy()
     
@@ -230,8 +248,8 @@ def create_plotly_interpolated_maps(
                 x=1
             ),
             margin=dict(l=40, r=40, t=60, b=40),
-            height=975,
-            width=750
+            width=VISUALIZATION_WIDTH,  # Use global width
+            height=VISUALIZATION_HEIGHT
         )
         
         figures[param] = fig
@@ -279,3 +297,164 @@ def mirror_corners(corners):
         mirrored_corners.append((mirrored_lat, lon))
     
     return mirrored_corners
+
+
+def create_floor_plan_with_sensors(
+    sensor_df,
+    coord_df,
+    floor_plan_path="./assets/floor_plan.png",
+    recommended_room=None,
+    parameter="temperature_mean",  # Used for coloring points but we'll hide the scale
+    padding_percent=0.05
+):
+    """
+    Creates a Plotly figure with the floor plan as background and sensor points overlaid,
+    styled to match the heatmap visualizations exactly.
+    
+    Args:
+        sensor_df: DataFrame with sensor data
+        coord_df: DataFrame with coordinates
+        floor_plan_path: Path to the floor plan image
+        recommended_room: ID of room to highlight (optional)
+        parameter: Which parameter to use for coloring points
+        padding_percent: Padding to add around data boundaries
+        
+    Returns:
+        Plotly figure with floor plan background and sensor points
+    """
+    import base64
+    
+    # Create a copy of coord_df to avoid modifying the original
+    mirrored_coord_df = coord_df.copy()
+    
+    # Find the central x-axis value to mirror around
+    x_min = mirrored_coord_df['x_coord'].min()
+    x_max = mirrored_coord_df['x_coord'].max()
+    x_center = (x_min + x_max) / 2
+    
+    # Mirror the x coordinates: new_x = 2*center - old_x
+    mirrored_coord_df['x_coord'] = 2 * x_center - mirrored_coord_df['x_coord']
+    
+    # Extract coordinates and values for sensor points
+    data_points = []
+    for _, sensor_row in sensor_df.iterrows():
+        loc = sensor_row['Location']
+        coord_row = mirrored_coord_df[mirrored_coord_df['Location'] == loc]
+        
+        if not coord_row.empty:
+            x = coord_row['x_coord'].values[0]
+            y = coord_row['y_coord'].values[0]
+            # Use a single value (doesn't matter which) since we're not showing the color scale
+            data_points.append((x, y, loc))
+    
+    if not data_points:
+        return None
+        
+    x, y, labels = zip(*data_points)
+    x, y = np.array(x), np.array(y)
+    
+    # Calculate natural boundaries with padding - EXACTLY match heatmap dimensions
+    padding_x = (max(x) - min(x)) * padding_percent
+    padding_y = (max(y) - min(y)) * padding_percent
+    
+    x_min, x_max = min(x) - padding_x, max(x) + padding_x
+    y_min, y_max = min(y) - padding_y, max(y) + padding_y
+    
+    # Create figure
+    fig = go.Figure()
+    
+    # Load and encode the floor plan image
+    try:
+        with open(floor_plan_path, "rb") as img_file:
+            img_bytes = img_file.read()
+            encoded = base64.b64encode(img_bytes).decode('ascii')
+        
+        # Add floor plan as background image - exact positioning to match heatmap
+        fig.update_layout(
+            images=[dict(
+                source=f'data:image/png;base64,{encoded}',
+                xref="x", yref="y",
+                x=x_min,
+                y=y_max,
+                sizex=x_max - x_min,
+                sizey=y_max - y_min,
+                sizing="stretch",
+                opacity=1.0,
+                layer="below"
+            )]
+        )
+    except Exception as e:
+        print(f"Error loading floor plan image: {e}")
+    
+    # Add sensor points - small and subtle to match heatmap style
+    fig.add_trace(go.Scatter(
+        x=x,
+        y=y,
+        mode='markers',
+        marker=dict(
+            size=3,  # Small dots matching heatmap
+            color='gray',  # Gray color to match heatmap
+            opacity=0.5,   # Semi-transparent matching heatmap
+            symbol='circle'
+        ),
+        name='Sensor Locations',
+        hovertemplate='<b>Location: %{text}</b><extra></extra>',
+        text=labels,
+        hoverinfo='text'
+    ))
+    
+    # Add recommended room highlight if specified - exactly match heatmap style
+    if recommended_room:
+        recommended_rooms = [recommended_room] if isinstance(recommended_room, str) else recommended_room
+
+        for room_id in recommended_rooms:
+            rec_row = mirrored_coord_df[mirrored_coord_df['Location'] == room_id]
+            if not rec_row.empty:
+                rx = rec_row['x_coord'].values[0]
+                ry = rec_row['y_coord'].values[0]
+                
+                tooltip_text = f"Selected Room: {room_id}"
+                
+                fig.add_trace(go.Scatter(
+                    x=[rx],
+                    y=[ry],
+                    mode='markers',
+                    marker=dict(
+                        size=12,  # Size matching heatmap
+                        color='red',  # Color matching heatmap
+                        symbol='circle',  # Symbol matching heatmap
+                        line=dict(width=2, color='red')  # Line matching heatmap
+                    ),
+                    name=f'Recommended: {room_id}',
+                    hovertemplate=tooltip_text + '<extra></extra>'
+                ))
+    
+    # Improve layout - EXACTLY match heatmap layout
+    fig.update_layout(
+        title=dict(
+            text="Floor Plan (Mirrored)",  # Title matching heatmap style
+            font=dict(size=16)
+        ),
+        xaxis=dict(
+            title="X Coordinate (Mirrored)",  # Label matching heatmap
+            showgrid=False
+        ),
+        yaxis=dict(
+            title="Y Coordinate",  # Label matching heatmap
+            showgrid=False,
+            scaleanchor="x",  # Make aspect ratio 1:1
+            scaleratio=0.5  # Match heatmap scaleratio
+        ),
+        legend=dict(
+            orientation="h",
+            yanchor="bottom",
+            y=1.02,
+            xanchor="right",
+            x=1
+        ),
+        margin=dict(l=40, r=40, t=60, b=40),
+        width=VISUALIZATION_WIDTH,
+        height=VISUALIZATION_HEIGHT
+    )
+    
+    return fig
