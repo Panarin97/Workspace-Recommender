@@ -17,6 +17,7 @@ def create_plotly_interpolated_maps(
 ):
     """
     Creates interactive interpolated heatmaps for each parameter using Plotly.
+    The coordinates are mirrored along the vertical axis.
     
     Args:
         sensor_df: DataFrame with sensor data (includes Location and parameter columns)
@@ -28,6 +29,17 @@ def create_plotly_interpolated_maps(
     Returns:
         Dictionary of Plotly figures for each parameter
     """
+    # Create a copy of coord_df to avoid modifying the original
+    mirrored_coord_df = coord_df.copy()
+    
+    # Find the central x-axis value to mirror around
+    x_min = mirrored_coord_df['x_coord'].min()
+    x_max = mirrored_coord_df['x_coord'].max()
+    x_center = (x_min + x_max) / 2
+    
+    # Mirror the x coordinates: new_x = 2*center - old_x
+    mirrored_coord_df['x_coord'] = 2 * x_center - mirrored_coord_df['x_coord']
+    
     # Create value ranges for parameters that need custom scaling
     value_ranges = {}
     for param in ['temperature_mean', 'humidity_mean']:
@@ -43,7 +55,7 @@ def create_plotly_interpolated_maps(
         data_points = []
         for _, sensor_row in sensor_df.iterrows():
             loc = sensor_row['Location']
-            coord_row = coord_df[coord_df['Location'] == loc]
+            coord_row = mirrored_coord_df[mirrored_coord_df['Location'] == loc]
             
             if not coord_row.empty and not pd.isna(sensor_row[param]):
                 x = coord_row['x_coord'].values[0]
@@ -156,17 +168,16 @@ def create_plotly_interpolated_maps(
             name='Sensor Locations',
             hovertemplate='<b>%{text}</b><br>Value: %{customdata:.2f}<extra></extra>',
             text=[f"Location: {sensor_df.loc[sensor_df['Location'] == loc, 'Location'].values[0]}" 
-                  for loc in [loc for i, loc in enumerate(sensor_df['Location']) if loc in coord_df['Location'].values]],
+                  for loc in [loc for i, loc in enumerate(sensor_df['Location']) if loc in mirrored_coord_df['Location'].values]],
             customdata=z
         ))
         
         # Add recommended room highlight if specified
         if recommended_room:
-
             recommended_rooms = [recommended_room] if isinstance(recommended_room, str) else recommended_room
 
             for room_id in recommended_rooms:
-                rec_row = coord_df[coord_df['Location'] == room_id]
+                rec_row = mirrored_coord_df[mirrored_coord_df['Location'] == room_id]
                 if not rec_row.empty:
                     rx = rec_row['x_coord'].values[0]
                     ry = rec_row['y_coord'].values[0]
@@ -198,11 +209,11 @@ def create_plotly_interpolated_maps(
         # Improve layout
         fig.update_layout(
             title=dict(
-                text=f"{get_parameter_display_name(param)} Distribution",
+                text=f"{get_parameter_display_name(param)} Distribution (Mirrored)",
                 font=dict(size=16)
             ),
             xaxis=dict(
-                title="X Coordinate",
+                title="X Coordinate (Mirrored)",
                 showgrid=False
             ),
             yaxis=dict(
@@ -237,3 +248,34 @@ def get_parameter_display_name(param):
         'pir_mean': 'Occupancy'
     }
     return display_names.get(param, param)
+
+
+# Helper function for mirroring corners if needed elsewhere
+def mirror_corners(corners):
+    """
+    Mirror corner coordinates along the vertical axis
+    
+    Args:
+        corners: List of (lat, lon) coordinate pairs
+        
+    Returns:
+        List of mirrored coordinates
+    """
+    if not corners:
+        return corners
+    
+    # Extract coordinates
+    lats = [corner[0] for corner in corners]
+    lons = [corner[1] for corner in corners]
+    
+    # Calculate center
+    lat_min, lat_max = min(lats), max(lats)
+    lat_center = (lat_min + lat_max) / 2
+    
+    mirrored_corners = []
+    for lat, lon in corners:
+        # Mirror along vertical axis (longitude stays the same)
+        mirrored_lat = 2 * lat_center - lat
+        mirrored_corners.append((mirrored_lat, lon))
+    
+    return mirrored_corners
