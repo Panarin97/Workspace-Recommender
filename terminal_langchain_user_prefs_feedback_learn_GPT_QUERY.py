@@ -12,6 +12,10 @@ from heat_map import plot_rectangular_heatmaps_for_parameters, plot_all_paramete
 import time
 import traceback
 import warnings
+import traceback
+import logging
+import sys
+
 from langchain_core._api.deprecation import LangChainDeprecationWarning
 warnings.filterwarnings('ignore', category=LangChainDeprecationWarning)
 
@@ -187,7 +191,7 @@ class TerminalRAG:
             description (str)
 
             # Metrics Explanation:
-            - Temperature (°C): Room temperature in degrees Celsius, affecting thermal comfort.
+            - Temperature (°C): Location temperature in degrees Celsius, affecting thermal comfort.
             - Humidity (%): Percentage of moisture in the air, with 30-60% typically being comfortable.
             - CO₂ (ppm): Carbon dioxide concentration in parts per million. Lower values (<800 ppm) indicate better air quality/ventilation.
             - Light (lux): Light intensity measured in lux. Higher values indicate brighter spaces.
@@ -257,7 +261,7 @@ class TerminalRAG:
             Provide answers in a single concise sentence whenever possible.
 
             # Metrics Explanation:
-            - Temperature (°C): Room temperature in degrees Celsius, affecting thermal comfort.
+            - Temperature (°C): Location temperature in degrees Celsius, affecting thermal comfort.
             - Humidity (%): Percentage of moisture in the air, with 30-60% typically being comfortable.
             - CO₂ (ppm): Carbon dioxide concentration in parts per million. Lower values (<800 ppm) indicate better air quality/ventilation.
             - Light (lux): Light intensity measured in lux. Higher values indicate brighter spaces.
@@ -284,6 +288,7 @@ class TerminalRAG:
                 - Separate multiple locations with commas only
                 - List at most 5 specific locations, even if more are found
                 - If more than 5 locations match, mention something like this in your response: "Showing 5 out of X matching locations"
+                - FOR STATISTICAL OR COUNT QUERIES, DO NOT INCLUDE THE Selected_locations LINE
             
             4. If no locations are returned, handle gracefully.
 
@@ -295,7 +300,11 @@ class TerminalRAG:
 
         preference_parser_prompt = PromptTemplate(
             template="""
-                You are a "Preference Parser" for a sensor-based recommendation system.
+                You are a "Preference Parser" for a sensor-based recommendation system. Your job is to interpret user messages 
+                and adjust their preferences accordingly.
+
+                The message can indicate a change in preferences, a request to show current preferences, or no action at all.
+                The idea is to interpret the user's intent and adjust their preferences in a structured way. Remember that sometimes users can simply ask about statistics without intending to change their preferences.
 
                 **IMPORTANT**: Return valid JSON *only*, with *no* triple backticks, code fences, or any extra text. 
                 Only a single JSON object as your entire output.
@@ -481,7 +490,7 @@ class TerminalRAG:
 
     def is_recommendation(self, question, answer):
         recommendation_keywords = ['recommend', 'best', 'suitable', 'good for', 'suggest']
-        return any(keyword in question.lower() for keyword in recommendation_keywords) or 'room' in answer.lower()
+        return any(keyword in question.lower() for keyword in recommendation_keywords) or 'location' in answer.lower()
     
 
     def update_user_preferences(self, changes: dict):
@@ -526,12 +535,38 @@ class TerminalRAG:
         print(f"Occupancy: {row['occupancy_preference']} (sensitivity: {row['occupancy_sensitivity']})")
         print(f"   Range: min={row['occupancy_min']}, max={row['occupancy_max']}")
         print()
+    def setup_logging(self):
+        # Create a logger
+        logger = logging.getLogger(__name__)
+        logger.setLevel(logging.DEBUG)
 
+        # Remove any existing handlers to prevent duplicate logs
+        if logger.handlers:
+            for handler in logger.handlers[:]:
+                logger.removeHandler(handler)
+
+        # Create console handler and set level to DEBUG
+        console_handler = logging.StreamHandler(sys.stdout)
+        console_handler.setLevel(logging.DEBUG)
+
+        # Create formatter
+        formatter = logging.Formatter('%(levelname)s - %(message)s')
+        console_handler.setFormatter(formatter)
+
+        # Add handler to logger
+        logger.addHandler(console_handler)
+
+        return logger
     
     def ask_question(self, question: str):
+        logger = self.setup_logging()
+
         try:
             print("\nDebug: Starting ask_question")
             print(f"Debug: Question received: {question}")
+
+            def log_detailed_error(message):
+                print(f"DETAILED ERROR: {message}")
 
             area_definitions = """
             # Workspace Areas and their Sensor IDs:
@@ -572,8 +607,13 @@ class TerminalRAG:
             - Sensors: TY-0801 to TY-0803, TY-0902 to TY-0903, TY-1002 to TY-1003, TY-1101 to TY-1103, TY-1201 to TY-1203
             """
 
+            logger.info(f"Starting ask_question with query: {question}")
+
             # 1) interpret preference changes
             action, changes = self.parse_preferences_intent_and_changes(question)
+            logger.debug(f"Preference parsing action: {action}")
+            logger.debug(f"Preference changes: {changes}")
+
             if action=="show":
                 self.display_user_preferences()
             elif action=="update" and len(changes)>0:
@@ -582,6 +622,7 @@ class TerminalRAG:
             # 2) aggregator or recommended-room
             if self.user_id:
                 user_data = self.user_preferences[self.user_preferences["user_id"]==self.user_id].iloc[0]
+                logger.debug(f"User data retrieved: {user_data.to_dict()}")
                 user_profile = (
                     f"=== CURRENT USER: {self.user_id} ===\n"
                     f"- Temperature: {user_data['temperature_preference']}\n"
@@ -591,11 +632,13 @@ class TerminalRAG:
                     f"- Occupancy: {user_data['occupancy_preference']}\n"
                 )
             else:
+                logger.warning("No user ID found")
                 user_profile = "NO USER LOGGED IN\n"
                 user_data = None
 
             # see if we want to do a data snippet
-            need_data = any(k in question.lower() for k in ["room","temperature","humidity","co2","light","occupancy"])
+            #need_data = any(k in question.lower() for k in ["room", "location", "temperature","humidity","co2","light","occupancy"])
+            # logger.debug(f"Need data: {need_data}")
             top_rooms_json = "[]"
             relevant_rooms = pd.DataFrame()
 
@@ -603,13 +646,13 @@ class TerminalRAG:
             if self.last_recommended:
                 context_string = f"Previously recommended = {self.last_recommended['Location']}"
             else:
-                context_string = "No previously recommended room."
+                context_string = "No previously recommended location."
 
             # for passing dataset stats into the query chain
             stats_str = json.dumps(self.param_stats, default=str)
 
 
-            if need_data and user_data is not None:
+            if user_data is not None:
                 query_result = self.query_chain.invoke({
                     "question": question,
                     "user_preferences": user_data.to_dict(),
@@ -618,7 +661,7 @@ class TerminalRAG:
                     "area_definitions": area_definitions
                 })
                 raw_code = query_result["text"].strip()
-                print("Debug: LLM raw code:", raw_code)
+                logger.info(f"Query chain generated code: {raw_code}")
 
                 final_code = raw_code  # we skip any .loc insertion
                 print("Debug: final code snippet:", final_code)
@@ -626,32 +669,44 @@ class TerminalRAG:
                 try:
                     df = self.sensor_data
                     result = eval(final_code)
+                    logger.debug(f"Query result type: {type(result)}")
                     if isinstance(result, pd.DataFrame):
+                        logger.info(f"DataFrame result shape: {result.shape}")
+                        logger.debug(f"DataFrame columns: {result.columns}")
+                        logger.debug(f"First few rows:\n{result.head()}")
                         if result.empty:
-                            print("No rooms found for that filter. Possibly the user requested an offset that yields zero rows.")
+                            print("No locations found for that filter. Possibly the user requested an offset that yields zero rows.")
                             top_rooms_json = "[]"
                         else:
                             columns_to_show = ["Location","temperature_mean","humidity_mean","co2_mean"]
                             if "score" in result.columns:
                                 columns_to_show.append("score")
-                            print("Debug: relevant_rooms data:")
+                            print("Debug: relevant_locations data:")
                             # To avoid exceeding context length
                             truncated = result.head(10)
                             print(result[columns_to_show])
                             top_rooms_json = json.dumps(truncated.to_dict(orient="records"))
 
                     elif isinstance(result,(int,float)):
+                        logger.info(f"Numeric result: {result}")
                         print(f"Debug: aggregator result => {result}")
                         top_rooms_json = json.dumps([{"Value": result}])
                     elif isinstance(result,pd.Series):
+                        logger.info(f"Series result length: {len(result)}")
+                        logger.debug(f"Series data:\n{result}")
                         as_df = result.to_frame("Value").reset_index()
                         print(as_df)
                         top_rooms_json = as_df.to_json(orient="records")
+                    elif isinstance(result, str):
+                        # Directly create JSON for a single location
+                        top_rooms_json = json.dumps([{"Location": result}])
                     else:
                         print("Unknown snippet result type, returning empty JSON")
                         top_rooms_json = "[]"
 
                 except Exception as e:
+                    logger.error(f"Query chain invocation failed: {e}")
+                    logger.error(traceback.format_exc())
                     print(f"Debug: Query execution failed => {e}")
                     top_rooms_json="[]"
 
@@ -664,10 +719,14 @@ class TerminalRAG:
                 "top_rooms_json": top_rooms_json,
                 "area_definitions": area_definitions
             })
+            logger.info("Analysis chain invoked successfully")
+            logger.debug(f"Analysis result: {analysis_result}")
+
             final_answer = analysis_result["text"] if analysis_result else "I couldn't find a suitable recommendation."
             print("Debug: analysis chain output =>", final_answer)
 
             recommended_id = self.parse_recommended_room(final_answer)
+            logger.debug(f"Parsed recommended location: {recommended_id}")
             if recommended_id:
                 # store last recommended
                 row_df = self.sensor_data[self.sensor_data["Location"]==recommended_id]
@@ -677,7 +736,7 @@ class TerminalRAG:
                 else:
                     self.last_recommended = row_df.iloc[0].to_dict()
                     self.current_room_id = recommended_id
-                    print(f"Debug: LLM recommended room => {recommended_id}")
+                    print(f"Debug: LLM recommended location => {recommended_id}")
             else:
                 self.last_recommended=None
                 self.current_room_id=None
@@ -685,9 +744,9 @@ class TerminalRAG:
             return final_answer
 
         except Exception as e:
-            print(f"Debug: Full error => {str(e)}")
-            print(f"Traceback =>\n{traceback.format_exc()}")
-            return "I apologize, but I encountered an error while processing your request."
+            logger.critical(f"Unexpected error in ask_question: {e}")
+            logger.critical(traceback.format_exc())
+            return "An unexpected error occurred while processing your request."
 
 
     def process_feedback(self, feedback_text, room_conditions):
@@ -782,13 +841,13 @@ class TerminalRAG:
                         padding_percent=0.05
                     )
                 else:
-                    print("No recommended room identified.")
+                    print("No recommended location identified.")
 
             print("\nExample questions:")
-            print("1. What room would you recommend for someone sensitive to humidity?")
-            print("2. Which room has the best conditions for me?")
-            print("3. Can you suggest a quiet room with good lighting?")
-            print("4. What's the average temperature across all rooms?")
+            print("1. What location would you recommend for someone sensitive to humidity?")
+            print("2. Which location has the best conditions for me?")
+            print("3. Can you suggest a quiet lcoation with good lighting?")
+            print("4. What's the average temperature across all locations?")
 
 
 if __name__ == "__main__":

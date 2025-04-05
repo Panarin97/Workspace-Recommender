@@ -472,8 +472,8 @@ with col2:
         latest = st.session_state.history[-1]
         
         # Show the answer
-        st.markdown("### Recommendation")
-        st.markdown(latest['answer'])
+        st.markdown("### Response")
+        st.info(latest['answer'])
         
         # Debug info - temporarily show this to verify the recommendation is being passed
         # if 'recommended_room' in st.session_state:
@@ -504,7 +504,7 @@ with col2:
                 
         # Show room details if there's a recommendation
         if st.session_state.has_recommendation and st.session_state.rag_system.last_recommended:
-            st.markdown("### Room Details")
+            st.markdown("### Location Details")
             room_data = st.session_state.rag_system.last_recommended
             
             # Create columns for room metrics
