@@ -20,7 +20,8 @@ def create_plotly_interpolated_maps(
     coord_df,
     parameters=["temperature_mean", "humidity_mean", "co2_mean", "light_mean", "pir_mean"],
     recommended_room=None,
-    padding_percent=0.05
+    padding_percent=0.05,
+    show_floor_plan=True
 ):
     """
     Creates interactive interpolated heatmaps for each parameter using Plotly.
@@ -36,6 +37,7 @@ def create_plotly_interpolated_maps(
     Returns:
         Dictionary of Plotly figures for each parameter
     """
+    import base64
     try:
         with Image.open("./assets/floor_plan.png") as img:
             floor_plan_width, floor_plan_height = img.size
@@ -141,10 +143,35 @@ def create_plotly_interpolated_maps(
             grid_z = np.clip(grid_z, vmin, vmax)
         else:
             grid_z = rbf(XX, YY)
+
+        floor_plan_encoded = None
+        if show_floor_plan:
+            try:
+                with open("./assets/floor_plan.png", "rb") as img_file:
+                    img_bytes = img_file.read()
+                    floor_plan_encoded = base64.b64encode(img_bytes).decode('ascii')
+            except Exception as e:
+                print(f"Error loading floor plan image: {e}")
+                floor_plan_encoded = None
         
         # Create figure
         fig = go.Figure()
-        
+
+        if show_floor_plan and floor_plan_encoded:
+            fig.update_layout(
+                images=[dict(
+                    source=f'data:image/png;base64,{floor_plan_encoded}',
+                    xref="x", yref="y",
+                    x=x_min,
+                    y=y_max,
+                    sizex=x_max - x_min,
+                    sizey=y_max - y_min,
+                    sizing="stretch",
+                    opacity=1.0,
+                    layer="below"
+                )]
+            )
+            
         # Add contour plot
         colorscale = 'RdBu_r'  # Default colorscale
         if param == 'co2_mean':
@@ -155,6 +182,7 @@ def create_plotly_interpolated_maps(
             x=grid_x,
             y=grid_y,
             colorscale=colorscale,
+            opacity=0.75 if show_floor_plan and floor_plan_encoded else 1.0,
             contours=dict(
                 coloring='heatmap',
                 showlabels=True,

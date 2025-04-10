@@ -245,7 +245,8 @@ def generate_visualizations(recommended_room=None):
             coord_df=st.session_state.rag_system.coord_data,
             parameters=["temperature_mean", "humidity_mean", "co2_mean", "light_mean", "pir_mean"],
             recommended_room=recommended_room,
-            padding_percent=0.05
+            padding_percent=0.05,
+            show_floor_plan=True
         )
         
         # Generate a single floor plan with sensors using temperature data
